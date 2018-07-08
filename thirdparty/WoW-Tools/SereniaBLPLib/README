@@ -1,0 +1,3 @@
+This is a copy of https://github.com/WoW-Tools/SereniaBLPLib @ ae7eaa2, but
+with all files but the essential ones removed to allow building with
+dotnetcore.

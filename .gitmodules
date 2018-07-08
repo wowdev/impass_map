@@ -1,0 +1,3 @@
+[submodule "thirdparty/WoW-Tools/CASCExplorer"]
+	path = thirdparty/WoW-Tools/CASCExplorer
+	url = git@github.com:WoW-Tools/CASCExplorer.git
