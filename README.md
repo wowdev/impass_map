@@ -2,6 +2,8 @@
 Generator for minimaps with impassible chunks marked, C#
 
 ## building
+- Be sure to clone the repository recursively, with `git clone --recursive`
+  or a `git submodule update --init --recursive` after cloning.
 - install dotnet 2.1
 - `dotnet build --configuration Release`
 
