@@ -69,15 +69,53 @@ class Program
     {
       Console.WriteLine("-- processing {0}", map);
 
-      var wdt_name = Path.Combine("world", "maps", map, String.Format("{0}.wdt", map));
-      if (!cascHandler.FileExists(wdt_name))
-      {
-        Console.WriteLine ("--- {0} does not exist, skipping!", wdt_name);
-        continue;
-      }
-
       System.Drawing.Bitmap[,] tiles = new System.Drawing.Bitmap[64,64];
       bool[,] had_tile = new bool[64,64];
+      bool[,] wdt_claims_tile = new bool[64,64];
+
+      var wdt_name = Path.Combine("world", "maps", map, String.Format("{0}.wdt", map));
+      try
+      {
+        using (Stream stream = cascHandler.OpenFile(wdt_name))
+        {
+          using (BinaryReader reader = new BinaryReader(stream))
+          {
+            while (reader.BaseStream.Position != reader.BaseStream.Length)
+            {
+              var magic = reader.ReadUInt32();
+              var size = reader.ReadUInt32();
+              var pos = reader.BaseStream.Position;
+
+              if (magic == mk ("MPHD"))
+              {
+                var flags = reader.ReadUInt32();
+
+                if ((flags & 1) == 1)
+                {
+                  throw new Exception ("map claims to be WMO only, skipping!");
+                }
+              }
+              else if (magic == mk ("MAIN"))
+              {
+                for (int x = 0; x < 64; ++x)
+                {
+                  for (int y = 0; y < 64; ++y)
+                  {
+                    wdt_claims_tile[y,x] = (reader.ReadUInt32() & 1) == 1;
+                    reader.ReadUInt32();
+                  }
+                }
+              }
+
+              reader.BaseStream.Position = pos + size;
+            }
+          }
+        }
+      }
+      catch (FileNotFoundException)
+      {
+        throw new Exception (String.Format("failed loading {0}, skipping!", wdt_name));
+      }
 
       var tile_size = 256;
 
@@ -113,6 +151,18 @@ class Program
              , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Yellow)
              , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
              );
+          var wdt_border_brush = new System.Drawing.Drawing2D.HatchBrush
+             ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
+             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
+             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
+             );
+          var wdt_border_pen = new System.Drawing.Pen
+             (wdt_border_brush, size_per_mcnk);
+          var unreferenced_brush = new System.Drawing.Drawing2D.HatchBrush
+             ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
+             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
+             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Green)
+             );
 
           try
           {
@@ -144,6 +194,31 @@ class Program
           }
           catch (FileNotFoundException)
           {
+            g.FillRectangle(wdt_border_brush, 0, 0, tiles[x,y].Height, tiles[x,y].Height);
+          }
+
+          if (wdt_claims_tile[x,y])
+          {
+            if (x == 0 || !wdt_claims_tile[x-1,y])
+            {
+              g.DrawLine(wdt_border_pen, 0, 0, 0, tiles[x,y].Height);
+            }
+            if (x == 63 || !wdt_claims_tile[x+1,y])
+            {
+              g.DrawLine(wdt_border_pen, tiles[x,y].Height, 0, tiles[x,y].Height, tiles[x,y].Height);
+            }
+            if (y == 0 || !wdt_claims_tile[x,y-1])
+            {
+              g.DrawLine(wdt_border_pen, 0, 0, tiles[x,y].Height, 0);
+            }
+            if (y == 63 || !wdt_claims_tile[x,y+1])
+            {
+              g.DrawLine(wdt_border_pen, 0, tiles[x,y].Height, tiles[x,y].Height, tiles[x,y].Height);
+            }
+          }
+          else if (had_tile[x,y])
+          {
+            g.FillRectangle(unreferenced_brush, 0, 0, tiles[x,y].Height, tiles[x,y].Height);
           }
         }
       }
