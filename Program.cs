@@ -67,196 +67,203 @@ class Program
 
     foreach (var map in opts.Maps)
     {
-      Console.WriteLine("-- processing {0}", map);
-
-      System.Drawing.Bitmap[,] tiles = new System.Drawing.Bitmap[64,64];
-      bool[,] had_tile = new bool[64,64];
-      bool[,] wdt_claims_tile = new bool[64,64];
-
-      var wdt_name = Path.Combine("world", "maps", map, String.Format("{0}.wdt", map));
       try
       {
-        using (Stream stream = cascHandler.OpenFile(wdt_name))
+        Console.WriteLine("-- processing {0}", map);
+
+        System.Drawing.Bitmap[,] tiles = new System.Drawing.Bitmap[64,64];
+        bool[,] had_tile = new bool[64,64];
+        bool[,] wdt_claims_tile = new bool[64,64];
+
+        var wdt_name = Path.Combine("world", "maps", map, String.Format("{0}.wdt", map));
+        try
         {
-          using (BinaryReader reader = new BinaryReader(stream))
+          using (Stream stream = cascHandler.OpenFile(wdt_name))
           {
-            while (reader.BaseStream.Position != reader.BaseStream.Length)
+            using (BinaryReader reader = new BinaryReader(stream))
             {
-              var magic = reader.ReadUInt32();
-              var size = reader.ReadUInt32();
-              var pos = reader.BaseStream.Position;
-
-              if (magic == mk ("MPHD"))
+              while (reader.BaseStream.Position != reader.BaseStream.Length)
               {
-                var flags = reader.ReadUInt32();
+                var magic = reader.ReadUInt32();
+                var size = reader.ReadUInt32();
+                var pos = reader.BaseStream.Position;
 
-                if ((flags & 1) == 1)
+                if (magic == mk ("MPHD"))
                 {
-                  throw new Exception ("map claims to be WMO only, skipping!");
-                }
-              }
-              else if (magic == mk ("MAIN"))
-              {
-                for (int x = 0; x < 64; ++x)
-                {
-                  for (int y = 0; y < 64; ++y)
+                  var flags = reader.ReadUInt32();
+
+                  if ((flags & 1) == 1)
                   {
-                    wdt_claims_tile[y,x] = (reader.ReadUInt32() & 1) == 1;
-                    reader.ReadUInt32();
+                    throw new Exception ("map claims to be WMO only, skipping!");
+                  }
+                }
+                else if (magic == mk ("MAIN"))
+                {
+                  for (int x = 0; x < 64; ++x)
+                  {
+                    for (int y = 0; y < 64; ++y)
+                    {
+                      wdt_claims_tile[y,x] = (reader.ReadUInt32() & 1) == 1;
+                      reader.ReadUInt32();
+                    }
+                  }
+                }
+
+                reader.BaseStream.Position = pos + size;
+              }
+            }
+          }
+        }
+        catch (FileNotFoundException)
+        {
+          throw new Exception (String.Format("failed loading {0}, skipping!", wdt_name));
+        }
+
+        var tile_size = 256;
+
+        for (int x = 0; x < 64; ++x)
+        {
+          for (int y = 0; y < 64; ++y)
+          {
+            had_tile[x,y] = false;
+
+            try
+            {
+              var blp_name = Path.Combine("world", "minimaps", map, String.Format("map{0:00}_{1:00}.blp", x, y));
+              using (Stream stream = cascHandler.OpenFile(blp_name))
+              {
+                var blp = new SereniaBLPLib.BlpFile(stream);
+                tiles[x,y] = blp.GetBitmap(0);
+
+                if (tiles[x,y].Height != tiles[x,y].Width) throw new Exception ("non-square minimap?!");
+              }
+              had_tile[x,y] = true;
+            }
+            catch (FileNotFoundException)
+            {
+              tiles[x,y] = new System.Drawing.Bitmap (tile_size, tile_size);
+            }
+
+            var size_per_mcnk = tiles[x,y].Height / 16f;
+
+            var g = System.Drawing.Graphics.FromImage(tiles[x,y]);
+
+            var impassable_brush = new System.Drawing.Drawing2D.HatchBrush
+               ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Yellow)
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
+               );
+            var wdt_border_brush = new System.Drawing.Drawing2D.HatchBrush
+               ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
+               );
+            var wdt_border_pen = new System.Drawing.Pen
+               (wdt_border_brush, size_per_mcnk);
+            var unreferenced_brush = new System.Drawing.Drawing2D.HatchBrush
+               ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Green)
+               );
+
+            try
+            {
+              var adt_name = Path.Combine("World", "Maps", map, String.Format("{0}_{1}_{2}.adt", map, x, y));
+              using (Stream stream = cascHandler.OpenFile(adt_name))
+              {
+                using (BinaryReader reader = new BinaryReader(stream))
+                {
+                  while (reader.BaseStream.Position != reader.BaseStream.Length)
+                  {
+                    var magic = reader.ReadUInt32();
+                    var size = reader.ReadUInt32();
+                    var pos = reader.BaseStream.Position;
+
+                    if (magic == mk ("MCNK"))
+                    {
+                      var flags = reader.ReadUInt32();
+                      var sub_x = reader.ReadUInt32();
+                      var sub_y = reader.ReadUInt32();
+                      if ((flags & 2) == 2)
+                        g.FillRectangle(impassable_brush, size_per_mcnk * sub_x, size_per_mcnk * sub_y, size_per_mcnk, size_per_mcnk);
+                    }
+
+                    reader.BaseStream.Position = pos + size;
                   }
                 }
               }
-
-              reader.BaseStream.Position = pos + size;
+              had_tile[x,y] = true;
             }
-          }
-        }
-      }
-      catch (FileNotFoundException)
-      {
-        throw new Exception (String.Format("failed loading {0}, skipping!", wdt_name));
-      }
-
-      var tile_size = 256;
-
-      for (int x = 0; x < 64; ++x)
-      {
-        for (int y = 0; y < 64; ++y)
-        {
-          had_tile[x,y] = false;
-
-          try
-          {
-            var blp_name = Path.Combine("world", "minimaps", map, String.Format("map{0:00}_{1:00}.blp", x, y));
-            using (Stream stream = cascHandler.OpenFile(blp_name))
+            catch (FileNotFoundException)
             {
-              var blp = new SereniaBLPLib.BlpFile(stream);
-              tiles[x,y] = blp.GetBitmap(0);
-
-              if (tiles[x,y].Height != tiles[x,y].Width) throw new Exception ("non-square minimap?!");
+              g.FillRectangle(wdt_border_brush, 0, 0, tiles[x,y].Height, tiles[x,y].Height);
             }
-            had_tile[x,y] = true;
-          }
-          catch (FileNotFoundException)
-          {
-            tiles[x,y] = new System.Drawing.Bitmap (tile_size, tile_size);
-          }
 
-          var size_per_mcnk = tiles[x,y].Height / 16f;
-
-          var g = System.Drawing.Graphics.FromImage(tiles[x,y]);
-
-          var impassable_brush = new System.Drawing.Drawing2D.HatchBrush
-             ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
-             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Yellow)
-             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
-             );
-          var wdt_border_brush = new System.Drawing.Drawing2D.HatchBrush
-             ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
-             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
-             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
-             );
-          var wdt_border_pen = new System.Drawing.Pen
-             (wdt_border_brush, size_per_mcnk);
-          var unreferenced_brush = new System.Drawing.Drawing2D.HatchBrush
-             ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
-             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
-             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Green)
-             );
-
-          try
-          {
-            var adt_name = Path.Combine("World", "Maps", map, String.Format("{0}_{1}_{2}.adt", map, x, y));
-            using (Stream stream = cascHandler.OpenFile(adt_name))
+            if (wdt_claims_tile[x,y])
             {
-              using (BinaryReader reader = new BinaryReader(stream))
+              if (x == 0 || !wdt_claims_tile[x-1,y])
               {
-                while (reader.BaseStream.Position != reader.BaseStream.Length)
-                {
-                  var magic = reader.ReadUInt32();
-                  var size = reader.ReadUInt32();
-                  var pos = reader.BaseStream.Position;
-
-                  if (magic == mk ("MCNK"))
-                  {
-                    var flags = reader.ReadUInt32();
-                    var sub_x = reader.ReadUInt32();
-                    var sub_y = reader.ReadUInt32();
-                    if ((flags & 2) == 2)
-                      g.FillRectangle(impassable_brush, size_per_mcnk * sub_x, size_per_mcnk * sub_y, size_per_mcnk, size_per_mcnk);
-                  }
-
-                  reader.BaseStream.Position = pos + size;
-                }
+                g.DrawLine(wdt_border_pen, 0, 0, 0, tiles[x,y].Height);
+              }
+              if (x == 63 || !wdt_claims_tile[x+1,y])
+              {
+                g.DrawLine(wdt_border_pen, tiles[x,y].Height, 0, tiles[x,y].Height, tiles[x,y].Height);
+              }
+              if (y == 0 || !wdt_claims_tile[x,y-1])
+              {
+                g.DrawLine(wdt_border_pen, 0, 0, tiles[x,y].Height, 0);
+              }
+              if (y == 63 || !wdt_claims_tile[x,y+1])
+              {
+                g.DrawLine(wdt_border_pen, 0, tiles[x,y].Height, tiles[x,y].Height, tiles[x,y].Height);
               }
             }
-            had_tile[x,y] = true;
-          }
-          catch (FileNotFoundException)
-          {
-            g.FillRectangle(wdt_border_brush, 0, 0, tiles[x,y].Height, tiles[x,y].Height);
-          }
-
-          if (wdt_claims_tile[x,y])
-          {
-            if (x == 0 || !wdt_claims_tile[x-1,y])
+            else if (had_tile[x,y])
             {
-              g.DrawLine(wdt_border_pen, 0, 0, 0, tiles[x,y].Height);
+              g.FillRectangle(unreferenced_brush, 0, 0, tiles[x,y].Height, tiles[x,y].Height);
             }
-            if (x == 63 || !wdt_claims_tile[x+1,y])
-            {
-              g.DrawLine(wdt_border_pen, tiles[x,y].Height, 0, tiles[x,y].Height, tiles[x,y].Height);
-            }
-            if (y == 0 || !wdt_claims_tile[x,y-1])
-            {
-              g.DrawLine(wdt_border_pen, 0, 0, tiles[x,y].Height, 0);
-            }
-            if (y == 63 || !wdt_claims_tile[x,y+1])
-            {
-              g.DrawLine(wdt_border_pen, 0, tiles[x,y].Height, tiles[x,y].Height, tiles[x,y].Height);
-            }
-          }
-          else if (had_tile[x,y])
-          {
-            g.FillRectangle(unreferenced_brush, 0, 0, tiles[x,y].Height, tiles[x,y].Height);
           }
         }
-      }
 
-      int min_x = 64;
-      int min_y = 64;
-      int max_x = -1;
-      int max_y = -1;
+        int min_x = 64;
+        int min_y = 64;
+        int max_x = -1;
+        int max_y = -1;
 
-      for (int x = 0; x < 64; ++x)
-      {
-        for (int y = 0; y < 64; ++y)
+        for (int x = 0; x < 64; ++x)
         {
-          if (had_tile[x,y]) {
-            min_x = Math.Min(min_x,x);
-            min_y = Math.Min(min_y,y);
-            max_x = Math.Max(max_x,x + 1);
-            max_y = Math.Max(max_y,y + 1);
+          for (int y = 0; y < 64; ++y)
+          {
+            if (had_tile[x,y]) {
+              min_x = Math.Min(min_x,x);
+              min_y = Math.Min(min_y,y);
+              max_x = Math.Max(max_x,x + 1);
+              max_y = Math.Max(max_y,y + 1);
+            }
           }
         }
-      }
 
-      var overall = new System.Drawing.Bitmap (tile_size * (max_x - min_x), tile_size * (max_y - min_y));
-      var overall_graphics = System.Drawing.Graphics.FromImage(overall);
+        var overall = new System.Drawing.Bitmap (tile_size * (max_x - min_x), tile_size * (max_y - min_y));
+        var overall_graphics = System.Drawing.Graphics.FromImage(overall);
 
-      for (int x = min_x; x <= max_x; ++x)
-      {
-        for (int y = min_y; y <= max_y; ++y)
+        for (int x = min_x; x <= max_x; ++x)
         {
-          if (had_tile[x,y]) {
-            overall_graphics.DrawImage(tiles[x,y], (x - min_x) * tile_size, (y - min_y) * tile_size, tile_size, tile_size);
+          for (int y = min_y; y <= max_y; ++y)
+          {
+            if (had_tile[x,y]) {
+              overall_graphics.DrawImage(tiles[x,y], (x - min_x) * tile_size, (y - min_y) * tile_size, tile_size, tile_size);
+            }
           }
         }
-      }
 
-      var output_file = Path.Combine (opts.OutputPath, String.Format("{0}.png", map));
-      System.IO.File.Delete (output_file);
-      overall.Save(output_file, System.Drawing.Imaging.ImageFormat.Png);
+        var output_file = Path.Combine (opts.OutputPath, String.Format("{0}.png", map));
+        System.IO.File.Delete (output_file);
+        overall.Save(output_file, System.Drawing.Imaging.ImageFormat.Png);
+      }
+      catch (Exception ex)
+      {
+        Console.WriteLine("--- {0}", ex.Message);
+      }
     }
 
     return 0;
