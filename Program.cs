@@ -38,6 +38,13 @@ class Program
     }
   }
 
+  static uint mk (string str)
+  {
+    if (str.Length != 4) throw new Exception ("non 4-character magic???");
+    return (uint)(str[3]) << 0 | (uint)(str[2]) << 8
+         | (uint)(str[1]) << 16 | (uint)(str[0]) << 24;
+  }
+
   static int RunAndReturnExitCode(Options opts)
   {
     if (!Directory.Exists(opts.OutputPath))
@@ -116,15 +123,15 @@ class Program
               {
                 while (reader.BaseStream.Position != reader.BaseStream.Length)
                 {
-                  var magic = reader.ReadInt32();
-                  var size = reader.ReadInt32();
+                  var magic = reader.ReadUInt32();
+                  var size = reader.ReadUInt32();
                   var pos = reader.BaseStream.Position;
 
-                  if (magic == 0x4d434e4b /* MCNK */)
+                  if (magic == mk ("MCNK"))
                   {
-                    var flags = reader.ReadInt32();
-                    var sub_x = reader.ReadInt32();
-                    var sub_y = reader.ReadInt32();
+                    var flags = reader.ReadUInt32();
+                    var sub_x = reader.ReadUInt32();
+                    var sub_y = reader.ReadUInt32();
                     if ((flags & 2) == 2)
                       g.FillRectangle(impassable_brush, size_per_mcnk * sub_x, size_per_mcnk * sub_y, size_per_mcnk, size_per_mcnk);
                   }
