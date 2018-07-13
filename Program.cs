@@ -110,7 +110,7 @@ class Program
 
           var impassable_brush = new System.Drawing.Drawing2D.HatchBrush
              ( System.Drawing.Drawing2D.HatchStyle.DiagonalCross
-             , System.Drawing.Color.FromArgb (255/2, 255, 255, 0)
+             , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Yellow)
              , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
              );
 
