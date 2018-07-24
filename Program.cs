@@ -158,6 +158,11 @@ class Program
                , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.DarkBlue)
                , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Red)
                );
+            var unknown_brush = new System.Drawing.Drawing2D.HatchBrush
+               ( System.Drawing.Drawing2D.HatchStyle.LargeGrid
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Black)
+               , System.Drawing.Color.FromArgb (255/2, System.Drawing.Color.Transparent)
+               );
             var wdt_border_pen = new System.Drawing.Pen
                (wdt_border_brush, size_per_mcnk);
             var unreferenced_brush = new System.Drawing.Drawing2D.HatchBrush
@@ -184,8 +189,21 @@ class Program
                       var flags = reader.ReadUInt32();
                       var sub_x = reader.ReadUInt32();
                       var sub_y = reader.ReadUInt32();
+					  var nLayers = reader.ReadUInt32();
+					  var nDoodadRefs = reader.ReadUInt32();
+					  var holes_high_res = reader.ReadUInt64();
+					  var ofsLayer = reader.ReadUInt32();
+					  var ofsRefs = reader.ReadUInt32();
+					  var ofsAlpha = reader.ReadUInt32();
+					  var sizeAlpha = reader.ReadUInt32();
+					  var ofsShadow = reader.ReadUInt32();
+					  var sizeShadow = reader.ReadUInt32();
+					  var areaid = reader.ReadUInt32();
                       if ((flags & 2) == 2)
                         g.FillRectangle(impassable_brush, size_per_mcnk * sub_x, size_per_mcnk * sub_y, size_per_mcnk, size_per_mcnk);
+					
+                      if (areaid == 0)
+                        g.FillRectangle(unknown_brush, size_per_mcnk * sub_x, size_per_mcnk * sub_y, size_per_mcnk, size_per_mcnk);
                     }
 
                     reader.BaseStream.Position = pos + size;
